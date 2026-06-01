@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Home, Search, Gavel, Shield, Link2, FileSignature, StickyNote } from 'lucide-react';
-import Dashboard     from './components/Dashboard';
-import SearchPage    from './components/SearchPage';
-import AnalyzePage   from './components/AnalyzePage';
+import Dashboard      from './components/Dashboard';
+import SearchPage     from './components/SearchPage';
+import AnalyzePage    from './components/AnalyzePage';
 import CompliancePage from './components/CompliancePage';
 import CorrelatePage  from './components/CorrelatePage';
 import ContractPage   from './components/ContractPage';
@@ -10,20 +10,43 @@ import NotesPage      from './components/NotesPage';
 import SetupScreen    from './components/SetupScreen';
 import './index.css';
 
-async function mcpSearch(params) {
-  const res = await fetch('/api/search', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+const LS_KEY = 'nyayaai_api_key';
+
+// Read key from localStorage
+export function getStoredKey() {
+  return localStorage.getItem(LS_KEY) || '';
+}
+
+// Save key to localStorage
+export function storeKey(key) {
+  localStorage.setItem(LS_KEY, key);
+}
+
+// Clear key
+export function clearKey() {
+  localStorage.removeItem(LS_KEY);
+}
+
+// All API calls attach the key as a header
+function apiFetch(path, body) {
+  return fetch(path, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': getStoredKey(),
+    },
+    body: JSON.stringify(body),
   });
+}
+
+async function mcpSearch(params) {
+  const res = await apiFetch('/api/search', params);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 async function mcpGetDocument(source, sourceId) {
-  const res = await fetch('/api/document', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source, sourceId }),
-  });
+  const res = await apiFetch('/api/document', { source, sourceId });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -39,14 +62,13 @@ const NAV = [
 ];
 
 export default function App() {
-  const [page, setPage]       = useState('home');
-  const [ready, setReady]     = useState(null); // null = loading, false = needs setup, true = ready
+  const [page, setPage] = useState('home');
+  // Check if key exists in localStorage
+  const [ready, setReady] = useState(null);
 
   useEffect(() => {
-    fetch('/api/ready')
-      .then(r => r.json())
-      .then(d => setReady(d.ready))
-      .catch(() => setReady(false));
+    const key = getStoredKey();
+    setReady(!!key && key.startsWith('sk-ant-'));
   }, []);
 
   // Still checking
@@ -105,8 +127,17 @@ export default function App() {
           <div style={{ marginTop: 5, fontSize: 10.5, lineHeight: 1.5 }}>
             SC · High Courts · SEBI · RBI · India Code · e-Gazette
           </div>
-          <div style={{ marginTop: 6, fontSize: 10, color: '#3a4a6a', lineHeight: 1.5 }}>
-            Legal information only. Not legal advice.<br />Consult a qualified advocate.
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 11, padding: '4px 8px', color: 'var(--muted)', width: '100%', justifyContent: 'center' }}
+              onClick={() => { clearKey(); setReady(false); }}
+            >
+              🔑 Change API Key
+            </button>
+          </div>
+          <div style={{ marginTop: 4, fontSize: 10, color: '#3a4a6a', lineHeight: 1.5 }}>
+            Legal information only. Not legal advice.
           </div>
         </div>
       </aside>

@@ -1,3 +1,4 @@
+import { getStoredKey } from '../App';
 import { useState } from 'react';
 import { Link2, Search, Loader, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -93,7 +94,7 @@ Be precise with section numbers and case citations.`;
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': getStoredKey() },
         body: JSON.stringify({ docText: '', question: prompt }),
       });
       const data = await res.json();

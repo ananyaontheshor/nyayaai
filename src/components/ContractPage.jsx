@@ -1,3 +1,4 @@
+import { getStoredKey } from '../App';
 import { useState } from 'react';
 import { FileSignature, Play, AlertTriangle, Info, CheckCircle, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -50,7 +51,7 @@ export default function ContractPage() {
     try {
       const res = await fetch('/api/contract-review', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': getStoredKey() },
         body: JSON.stringify({
           docText: activeText,
           contractType: contractType || 'General Contract',

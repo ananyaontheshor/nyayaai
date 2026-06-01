@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, File, X, FileText, AlertCircle } from 'lucide-react';
 import PrivacyConsent from './PrivacyConsent';
+import { getStoredKey } from '../App';
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -30,7 +31,7 @@ export default function FileUpload({ onExtracted, label = 'Upload Document (PDF,
     const form = new FormData();
     form.append('file', file);
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const res = await fetch('/api/upload', { method: 'POST', body: form, headers: { 'x-api-key': getStoredKey() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       setUploaded({ name: data.filename, size: file.size, pages: data.pages });

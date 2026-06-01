@@ -8,56 +8,23 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Read .env manually to bypass any dotenvx interceptors
-try {
-  const envPath = path.join(__dirname, '..', '.env');
-  const envContent = fs.readFileSync(envPath, 'utf-8');
-  for (const line of envContent.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const val = match[2].trim().replace(/^["']|["']$/g, '');
-      if (!process.env[key]) process.env[key] = val;
-    }
-  }
-} catch {}
-
 const app = express();
 app.use(express.json({ limit: '4mb' }));
 
-const ENV_PATH = path.join(__dirname, '..', '.env');
-
-function readKeyFromEnv() {
-  try {
-    const content = fs.readFileSync(ENV_PATH, 'utf-8');
-    const match = content.match(/^ANTHROPIC_API_KEY=(.+)$/m);
-    const val = match?.[1]?.trim().replace(/^["']|["']$/g, '');
-    return val && val !== 'your_anthropic_api_key_here' ? val : null;
-  } catch { return null; }
+// Key comes from the request header (stored in user's browser localStorage)
+// Falls back to env var for local dev convenience
+function getKeyFromRequest(req) {
+  const headerKey = req?.headers?.['x-api-key'];
+  if (headerKey && headerKey.startsWith('sk-ant-')) return headerKey;
+  // fallback: env var (useful for local dev)
+  return process.env.ANTHROPIC_API_KEY || null;
 }
 
-function writeKeyToEnv(key) {
-  let content = '';
-  try { content = fs.readFileSync(ENV_PATH, 'utf-8'); } catch {}
-  if (/^ANTHROPIC_API_KEY=.*/m.test(content)) {
-    content = content.replace(/^ANTHROPIC_API_KEY=.*$/m, `ANTHROPIC_API_KEY=${key}`);
-  } else {
-    content = `ANTHROPIC_API_KEY=${key}\nPORT=3001\n`;
-  }
-  fs.writeFileSync(ENV_PATH, content, 'utf-8');
+function getClient(req) {
+  const key = getKeyFromRequest(req);
+  if (!key) throw new Error('API key not provided. Please enter your key on the setup screen.');
+  return new Anthropic({ apiKey: key });
 }
-
-// Mutable client — recreated when key is set via setup screen
-let _client = null;
-function getClient() {
-  if (!_client) {
-    const key = readKeyFromEnv();
-    if (!key) throw new Error('API key not configured. Please complete setup.');
-    _client = new Anthropic({ apiKey: key });
-  }
-  return _client;
-}
-function resetClient() { _client = null; }
 
 // Multer — memory storage, max 10 MB
 const upload = multer({
@@ -111,13 +78,13 @@ Always cite specific section numbers, act names, case citations (e.g. AIR 2023 S
 Use Indian legal terminology correctly. Be precise and structured.`;
 
 // ─── Search ──────────────────────────────────────────────────────
-async function callSearch(params) {
+async function callSearch(params, req) {
   const { query, namespace = 'case_law', sources = [], topK = 10, dateStart, dateEnd } = params;
   const srcFilter = sources.length ? sources.join(', ') : 'all Indian sources';
   const dateFilter = dateStart || dateEnd
     ? ` Date range: ${dateStart || 'any'} to ${dateEnd || 'now'}.` : '';
 
-  const resp = await getClient().messages.create({
+  const resp = await getClient(req).messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 3000,
     system: `You are a legal retrieval system for Indian databases:
@@ -150,8 +117,8 @@ Use real Indian case names and citation formats like (2023) 5 SCC 120 or AIR 202
 }
 
 // ─── Get document ─────────────────────────────────────────────────
-async function callGetDocument(source, sourceId) {
-  const resp = await getClient().messages.create({
+async function callGetDocument(source, sourceId, req) {
+  const resp = await getClient(req).messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 4000,
     system: `You are a legal document retrieval system. Produce a realistic, detailed Indian legal document.
@@ -168,11 +135,11 @@ Return JSON: {"text":"full document text"}`,
 }
 
 // ─── Analyze ──────────────────────────────────────────────────────
-async function callAnalyze(docText, question) {
+async function callAnalyze(docText, question, req) {
   const content = docText?.trim()
     ? `DOCUMENT:\n${docText.slice(0, 14000)}\n\n---\nTASK:\n${question}`
     : question;
-  const resp = await getClient().messages.create({
+  const resp = await getClient(req).messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     system: LEGAL_SYSTEM,
@@ -182,7 +149,7 @@ async function callAnalyze(docText, question) {
 }
 
 // ─── Compliance (multi-turn with acts) ────────────────────────────
-async function callCompliance({ scenario, domain, acts, docText }) {
+async function callCompliance({ scenario, domain, acts, docText }, req) {
   const actsClause = acts?.length
     ? `Focus specifically on these acts/regulations: ${acts.join(', ')}.`
     : 'Check against all applicable Indian laws and regulations.';
@@ -224,7 +191,7 @@ Concrete prioritised next steps with timeline suggestions.
 
 Be specific: cite section numbers, case citations, penalty amounts exactly.`;
 
-  const resp = await getClient().messages.create({
+  const resp = await getClient(req).messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     system: LEGAL_SYSTEM,
@@ -234,7 +201,7 @@ Be specific: cite section numbers, case citations, penalty amounts exactly.`;
 }
 
 // ─── Contract review ──────────────────────────────────────────────
-async function callContractReview({ docText, contractType, jurisdiction, focusAreas }) {
+async function callContractReview({ docText, contractType, jurisdiction, focusAreas }, req) {
   const focus = focusAreas?.length ? `Focus areas: ${focusAreas.join(', ')}.` : '';
   const prompt = `CONTRACT REVIEW REQUEST
 
@@ -274,7 +241,7 @@ Use a table.
 
 Be specific: cite section numbers and case law.`;
 
-  const resp = await getClient().messages.create({
+  const resp = await getClient(req).messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     system: LEGAL_SYSTEM,
@@ -286,37 +253,37 @@ Be specific: cite section numbers and case law.`;
 // ═══ Routes ══════════════════════════════════════════════════════
 
 app.post('/api/search', async (req, res) => {
-  try { res.json(await callSearch(req.body)); }
+  try { res.json(await callSearch(req.body, req)); }
   catch (e) { res.status(500).json({ error: e.message, results: [] }); }
 });
 
 app.post('/api/document', async (req, res) => {
-  try { res.json(await callGetDocument(req.body.source, req.body.sourceId)); }
+  try { res.json(await callGetDocument(req.body.source, req.body.sourceId, req)); }
   catch (e) { res.status(500).json({ error: e.message, text: 'Failed.' }); }
 });
 
 app.post('/api/analyze', async (req, res) => {
-  try { res.json(await callAnalyze(req.body.docText || '', req.body.question)); }
+  try { res.json(await callAnalyze(req.body.docText || '', req.body.question, req)); }
   catch (e) { res.status(500).json({ error: e.message, analysis: '' }); }
 });
 
 app.post('/api/compliance', async (req, res) => {
-  try { res.json(await callCompliance(req.body)); }
+  try { res.json(await callCompliance(req.body, req)); }
   catch (e) { res.status(500).json({ error: e.message, analysis: '' }); }
 });
 
 app.post('/api/contract-review', async (req, res) => {
-  try { res.json(await callContractReview(req.body)); }
+  try { res.json(await callContractReview(req.body, req)); }
   catch (e) { res.status(500).json({ error: e.message, analysis: '' }); }
 });
 
-// File upload — parse PDF/DOCX/TXT and return extracted text
+// File upload — parse PDF/DOCX/TXT, no AI call needed
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const text = await extractText(req.file.buffer, req.file.mimetype, req.file.originalname);
     res.json({
-      text: text.slice(0, 50000), // cap at 50k chars
+      text: text.slice(0, 50000),
       filename: req.file.originalname,
       size: req.file.size,
       pages: text.split('\n\n').length,
@@ -326,40 +293,32 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// Ready — server is always ready; key comes from browser
 app.get('/api/ready', (req, res) => {
-  res.json({ ready: !!readKeyFromEnv() });
+  res.json({ ready: true });
 });
 
-// Setup endpoint — saves key to .env and resets the client
+// Setup — validates key by making a test API call
 app.post('/api/setup', async (req, res) => {
   const { apiKey } = req.body;
   if (!apiKey || !apiKey.startsWith('sk-ant-')) {
     return res.status(400).json({ error: 'Invalid API key format. Must start with sk-ant-' });
   }
   try {
-    // Validate the key actually works before saving
     const testClient = new Anthropic({ apiKey });
     await testClient.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 5,
       messages: [{ role: 'user', content: 'hi' }],
     });
-    // Key works — save it
-    writeKeyToEnv(apiKey);
-    resetClient();
     res.json({ ok: true });
   } catch (e) {
     const msg = e.message || '';
     if (msg.includes('credit balance')) {
-      // Key is valid but no credits — save it anyway, show warning
-      writeKeyToEnv(apiKey);
-      resetClient();
-      return res.json({ ok: true, warning: 'API key saved but your credit balance is too low. Add credits at console.anthropic.com/billing.' });
+      // Valid key, just no credits — allow it through with a warning
+      return res.json({ ok: true, warning: 'API key is valid but your credit balance is too low. Add credits at console.anthropic.com/billing.' });
     }
-    if (msg.includes('authentication') || msg.includes('401') || msg.includes('invalid')) {
-      return res.status(400).json({ error: 'API key is invalid. Please check and try again.' });
-    }
-    res.status(500).json({ error: msg });
+    return res.status(400).json({ error: 'API key is invalid. Please check and try again.' });
   }
 });
 

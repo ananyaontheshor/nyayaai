@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { KeyRound, ExternalLink, CheckCircle, AlertTriangle, Loader, Eye, EyeOff, ChevronRight, Shield } from 'lucide-react';
+import { KeyRound, ExternalLink, CheckCircle, AlertTriangle, Eye, EyeOff, ChevronRight, Shield } from 'lucide-react';
+import { storeKey } from '../App';
 
 const STEPS = [
-  { n: 1, label: 'Get API Key', desc: 'Create a free account on Anthropic Console' },
-  { n: 2, label: 'Add Credits', desc: 'Add $5–$10 to get started (lasts hundreds of queries)' },
-  { n: 3, label: 'Paste Key', desc: 'Paste your key below — saved automatically' },
+  { n: 1, label: 'Get API Key',  desc: 'Create a free account on Anthropic Console' },
+  { n: 2, label: 'Add Credits',  desc: 'Add $5–$10 to get started' },
+  { n: 3, label: 'Paste Key',    desc: 'Saved in your browser only' },
 ];
 
 export default function SetupScreen({ onReady }) {
-  const [key, setKey]           = useState('');
-  const [show, setShow]         = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [warning, setWarning]   = useState('');
-  const [success, setSuccess]   = useState(false);
+  const [key, setKey]         = useState('');
+  const [show, setShow]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [success, setSuccess] = useState(false);
 
   const valid = key.startsWith('sk-ant-') && key.length > 30;
 
@@ -21,24 +21,28 @@ export default function SetupScreen({ onReady }) {
     if (!valid) return;
     setLoading(true);
     setError('');
-    setWarning('');
+
     try {
+      // Validate the key works by calling the backend with it
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: key }),
       });
       const data = await res.json();
+
       if (!res.ok) {
         setError(data.error || 'Setup failed.');
-      } else {
-        setSuccess(true);
-        if (data.warning) setWarning(data.warning);
-        setTimeout(() => onReady(), 1800);
+        setLoading(false);
+        return;
       }
+
+      // Key is valid (or valid-but-no-credits) — save to localStorage
+      storeKey(key);
+      setSuccess(true);
+      setTimeout(() => onReady(), 1500);
     } catch (e) {
       setError('Could not connect to backend. Make sure the server is running.');
-    } finally {
       setLoading(false);
     }
   }
@@ -68,7 +72,7 @@ export default function SetupScreen({ onReady }) {
         </div>
 
         {/* Steps */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 28, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 28, justifyContent: 'center', alignItems: 'center' }}>
           {STEPS.map((s, i) => (
             <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ textAlign: 'center' }}>
@@ -93,19 +97,19 @@ export default function SetupScreen({ onReady }) {
           ))}
         </div>
 
-        {/* Main card */}
+        {/* Card */}
         <div className="card" style={{ padding: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <KeyRound size={20} color="var(--gold)" />
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>Enter your Anthropic API Key</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                Saved locally to your machine — never shared
+                Saved in your browser only — never sent to any server
               </div>
             </div>
           </div>
 
-          {/* Key input */}
+          {/* Input */}
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <input
               className="input"
@@ -127,50 +131,38 @@ export default function SetupScreen({ onReady }) {
             </button>
           </div>
 
-          {/* Validation hint */}
+          {/* Hints */}
           {key && !valid && (
             <div style={{ fontSize: 12, color: 'var(--amber)', marginBottom: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
               <AlertTriangle size={12} /> Key should start with <code style={{ background: 'var(--surface2)', padding: '1px 5px', borderRadius: 3 }}>sk-ant-</code>
             </div>
           )}
 
-          {/* Error */}
           {error && (
             <div style={{ fontSize: 13, color: 'var(--red)', marginBottom: 12, display: 'flex', gap: 7, alignItems: 'flex-start', background: 'var(--red-dim)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)' }}>
               <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> {error}
             </div>
           )}
 
-          {/* Warning */}
-          {warning && (
-            <div style={{ fontSize: 13, color: 'var(--amber)', marginBottom: 12, display: 'flex', gap: 7, alignItems: 'flex-start', background: 'var(--amber-dim)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(245,158,11,0.25)' }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>{warning}</span>
-            </div>
-          )}
-
-          {/* Success */}
           {success && (
             <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 12, display: 'flex', gap: 7, alignItems: 'center', background: 'var(--green-dim)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)' }}>
               <CheckCircle size={14} /> API key saved! Launching NyayaAI…
             </div>
           )}
 
-          {/* Submit */}
           <button
             className="btn btn-primary"
             style={{ width: '100%', justifyContent: 'center', padding: '12px 20px', fontSize: 14 }}
             onClick={handleSubmit}
             disabled={!valid || loading || success}
           >
-            {loading ? <><span className="spinner" /> Verifying key…</> :
-             success ? <><CheckCircle size={15} /> Connected!</> :
-             <>Launch NyayaAI <ChevronRight size={15} /></>}
+            {loading  ? <><span className="spinner" /> Verifying key…</> :
+             success  ? <><CheckCircle size={15} /> Connected!</>        :
+                        <>Launch NyayaAI <ChevronRight size={15} /></>}
           </button>
 
           <div className="divider" />
 
-          {/* How to get a key */}
           <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>How to get your API key:</div>
             <ol style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -179,22 +171,21 @@ export default function SetupScreen({ onReady }) {
                 <a href="https://console.anthropic.com" target="_blank" rel="noreferrer"
                   style={{ color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   console.anthropic.com <ExternalLink size={11} />
-                </a>
-                {' '}and sign up (free)
+                </a>{' '}and sign up (free)
               </li>
-              <li>Click <strong style={{ color: 'var(--text)' }}>API Keys</strong> in the sidebar → <strong style={{ color: 'var(--text)' }}>Create Key</strong></li>
+              <li>Click <strong style={{ color: 'var(--text)' }}>API Keys</strong> → <strong style={{ color: 'var(--text)' }}>Create Key</strong></li>
               <li>Go to <strong style={{ color: 'var(--text)' }}>Billing</strong> and add $5–$10 of credits</li>
-              <li>Paste the key above — it's saved to your machine only</li>
+              <li>Paste the key above — saved to your browser only</li>
             </ol>
           </div>
         </div>
 
         {/* Privacy note */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 16, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
           <Shield size={14} color="var(--muted)" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.55 }}>
-            Your API key is stored only in the <code style={{ background: 'var(--surface2)', padding: '1px 5px', borderRadius: 3 }}>.env</code> file on this machine.
-            It is never sent anywhere except directly to Anthropic's API. NyayaAI has no servers — everything runs locally.
+            Your API key is stored only in <strong style={{ color: 'var(--text2)' }}>your browser's localStorage</strong> on this device.
+            It is sent directly to Anthropic's API with each request. NyayaAI's server never stores or logs your key.
           </div>
         </div>
       </div>

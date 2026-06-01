@@ -1,3 +1,4 @@
+import { getStoredKey } from '../App';
 import { useState } from 'react';
 import { Shield, CheckCircle, XCircle, AlertCircle, Play, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -202,7 +203,7 @@ export default function CompliancePage({ mcpSearch }) {
     try {
       const res = await fetch('/api/compliance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': getStoredKey() },
         body: JSON.stringify({
           scenario,
           domain: domainLabel,

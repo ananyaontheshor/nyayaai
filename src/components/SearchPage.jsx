@@ -1,3 +1,4 @@
+import { getStoredKey } from '../App';
 import { useState } from 'react';
 import { Search, Loader, ExternalLink, Calendar, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -93,7 +94,7 @@ export default function SearchPage({ mcpSearch, mcpGetDocument }) {
       // Build prompt and call the analyze endpoint
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': getStoredKey() },
         body: JSON.stringify({
           docText: docText.slice(0, 12000),
           question: 'Provide a structured legal analysis: (1) Key Facts, (2) Legal Issues, (3) Ratio Decidendi / Holding, (4) Relevant Acts & Sections cited, (5) Significance & Impact.',
