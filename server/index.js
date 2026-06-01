@@ -331,9 +331,8 @@ app.get('/api/health', (req, res) => res.json({
 const DIST = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST));
-  app.get('(.*)', (req, res) => {
-    // Don't catch API routes
-    if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(DIST, 'index.html'));
   });
 }
